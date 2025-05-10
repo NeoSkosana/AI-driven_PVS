@@ -5,8 +5,10 @@ import logging
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+from ..monitoring.metrics import MetricsService
 
 logger = logging.getLogger(__name__)
+metrics = MetricsService()
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Middleware for logging request information and performance metrics."""
