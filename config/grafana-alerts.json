@@ -1,0 +1,66 @@
+[
+    {
+        "name": "High Error Rate Alert",
+        "type": "notification",
+        "message": "Error rate has exceeded threshold",
+        "conditions": [
+            {
+                "evaluator": {
+                    "params": [0.1],
+                    "type": "gt"
+                },
+                "operator": {
+                    "type": "and"
+                },
+                "query": {
+                    "params": ["rate(error_total[5m])"]
+                },
+                "reducer": {
+                    "params": [],
+                    "type": "avg"
+                },
+                "type": "query"
+            }
+        ],
+        "frequency": "1m",
+        "handler": 1,
+        "notifications": [
+            {
+                "uid": "default-email"
+            }
+        ]
+    },
+    {
+        "name": "High Response Time Alert",
+        "type": "notification",
+        "message": "Average response time has exceeded threshold",
+        "conditions": [
+            {
+                "evaluator": {
+                    "params": [1.0],
+                    "type": "gt"
+                },
+                "operator": {
+                    "type": "and"
+                },
+                "query": {
+                    "params": [
+                        "rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])"
+                    ]
+                },
+                "reducer": {
+                    "params": [],
+                    "type": "avg"
+                },
+                "type": "query"
+            }
+        ],
+        "frequency": "1m",
+        "handler": 1,
+        "notifications": [
+            {
+                "uid": "default-email"
+            }
+        ]
+    }
+]

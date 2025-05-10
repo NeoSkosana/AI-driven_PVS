@@ -16,12 +16,18 @@ from ..cache.redis_cache import RedisCache
 from ..queue.message_queue import MessageQueue
 from ..auth.auth_service import get_current_active_user, User
 from ..middleware.rate_limiter import RateLimiter
+from ..middleware.monitoring_middleware import MonitoringMiddleware
 from ..utils.error_handlers import (
     AppException,
     ValidationException,
     app_exception_handler,
     validation_exception_handler
 )
+from ..utils.logging_config import setup_logging, get_logger
+
+# Setup logging
+setup_logging()
+logger = get_logger(__name__)
 
 # Tags metadata
 tags_metadata = [
@@ -92,6 +98,9 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi
+
+# Add monitoring middleware
+app.add_middleware(MonitoringMiddleware)
 
 # Add CORS middleware
 app.add_middleware(
@@ -191,6 +200,19 @@ message_queue.channel.basic_consume(
     queue="validation_tasks",
     on_message_callback=lambda ch, method, props, body: process_validation_task(body)
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    logger.info("Starting up API service")
+    message_queue.connect()
+    message_queue.declare_queue("validation_tasks")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    logger.info("Shutting down API service")
+    message_queue.disconnect()
 
 # Health check endpoint
 @app.get("/health", 

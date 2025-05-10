@@ -1,45 +1,91 @@
 """Logging configuration for the application."""
 import logging
+import json
 import sys
-from pathlib import Path
-from logging.handlers import RotatingFileHandler
-import os
+import uuid
+from datetime import datetime
+from typing import Any, Dict
+from pythonjsonlogger import jsonlogger
+from contextvars import ContextVar
 
-def setup_logging(log_level: str = "INFO") -> None:
-    """
-    Configure logging for the application.
+# Context variable to store correlation ID
+correlation_id: ContextVar[str] = ContextVar('correlation_id', default='')
+
+class CustomJsonFormatter(jsonlogger.JsonFormatter):
+    """Custom JSON formatter for structured logging."""
     
-    Args:
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    """
-    # Create logs directory if it doesn't exist
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
+    def add_fields(self, log_record: Dict[str, Any], record: logging.LogRecord, message_dict: Dict[str, Any]) -> None:
+        """Add custom fields to the log record."""
+        super().add_fields(log_record, record, message_dict)
+        
+        # Add standard fields
+        log_record['timestamp'] = datetime.utcnow().isoformat()
+        log_record['level'] = record.levelname
+        log_record['module'] = record.module
+        log_record['function'] = record.funcName
+        log_record['line'] = record.lineno
+        
+        # Add correlation ID if available
+        try:
+            log_record['correlation_id'] = correlation_id.get()
+        except LookupError:
+            log_record['correlation_id'] = ''
+
+def setup_logging(level: str = 'INFO') -> None:
+    """Setup application logging with JSON formatting."""
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
     
-    # Configure root logger
-    logger = logging.getLogger()
-    logger.setLevel(getattr(logging, log_level.upper()))
+    # Remove existing handlers
+    for handler in root_logger.handlers:
+        root_logger.removeHandler(handler)
     
-    # Log format
-    log_format = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    
-    # Console handler
+    # Create console handler with JSON formatting
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(log_format)
-    logger.addHandler(console_handler)
-    
-    # File handler
-    file_handler = RotatingFileHandler(
-        log_dir / "app.log",
-        maxBytes=10485760,  # 10MB
-        backupCount=5
+    formatter = CustomJsonFormatter(
+        '%(timestamp)s %(level)s %(module)s %(correlation_id)s %(message)s'
     )
-    file_handler.setFormatter(log_format)
-    logger.addHandler(file_handler)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
     
-    # Set uvicorn access logger level
-    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    # Create file handler for errors
+    error_handler = logging.FileHandler('errors.log')
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(formatter)
+    root_logger.addHandler(error_handler)
+
+def get_correlation_id() -> str:
+    """Get the current correlation ID or generate a new one."""
+    try:
+        return correlation_id.get()
+    except LookupError:
+        new_id = str(uuid.uuid4())
+        correlation_id.set(new_id)
+        return new_id
+
+def set_correlation_id(id: str) -> None:
+    """Set the correlation ID for the current context."""
+    correlation_id.set(id)
+
+class LoggerAdapter(logging.LoggerAdapter):
+    """Logger adapter that adds contextual information."""
     
-    logger.info("Logging configured successfully")
+    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+        """Process the logging message and keyword arguments."""
+        extra = kwargs.get('extra', {})
+        
+        # Add correlation ID
+        if 'correlation_id' not in extra:
+            extra['correlation_id'] = get_correlation_id()
+            
+        # Add timestamp if not present
+        if 'timestamp' not in extra:
+            extra['timestamp'] = datetime.utcnow().isoformat()
+            
+        kwargs['extra'] = extra
+        return msg, kwargs
+
+def get_logger(name: str) -> LoggerAdapter:
+    """Get a logger instance with the custom adapter."""
+    logger = logging.getLogger(name)
+    return LoggerAdapter(logger, {})
