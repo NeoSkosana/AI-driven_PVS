@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ValidationResult, ValidationStatusResponse } from '../types/validation';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -14,30 +15,6 @@ export interface ProblemStatement {
   target_market?: string;
 }
 
-export interface ValidationResult {
-  problem_id: string;
-  timestamp: string;
-  sentiment_summary: {
-    overall_sentiment: string;
-    positive_ratio: number;
-    negative_ratio: number;
-    neutral_ratio: number;
-    average_score: number;
-  };
-  engagement_metrics: {
-    avg_score: number;
-    avg_comments: number;
-    total_engagement: number;
-  };
-  temporal_analysis: {
-    earliest_post: string;
-    latest_post: string;
-    avg_posts_per_day: number;
-  };
-  validation_score: number;
-  relevant_posts: any[];
-}
-
 export interface ValidationRequest {
   title: string;
   description: string;
@@ -47,35 +24,6 @@ export interface ValidationRequest {
 
 export interface ValidationResponse {
   request_id: string;
-}
-
-export interface ValidationResult {
-  problem_id: string;
-  validation_score: number;
-  sentiment_summary: {
-    overall_sentiment: string;
-    positive_ratio: number;
-    negative_ratio: number;
-    neutral_ratio: number;
-    average_score: number;
-  };
-  engagement_metrics: {
-    total_engagement: number;
-    avg_score: number;
-    avg_comments: number;
-  };
-  temporal_analysis: {
-    earliest_post: string;
-    latest_post: string;
-    avg_posts_per_day: number;
-  };
-}
-
-export interface ValidationStatusResponse {
-  status: 'processing' | 'completed' | 'failed';
-  request_id: string;
-  timestamp: string;
-  result?: ValidationResult;
 }
 
 export const validateProblem = async (problem: ValidationRequest): Promise<ValidationResponse> => {

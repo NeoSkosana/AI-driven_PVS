@@ -12,7 +12,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { listProblems } from '../services/api';
-import { ValidationResult } from '../services/api';
+import { ValidationResult } from '../types/validation';
 
 const Dashboard: React.FC = () => {
   const { data: problems, isLoading, error } = useQuery<ValidationResult[]>({

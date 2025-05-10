@@ -9,15 +9,21 @@ import {  Container,
   Grid,
   Card,
   CardContent,
+  Alert,
+  AlertTitle,
+  List,
+  ListItem,
+  ListItemText,
+  Tooltip,
 } from '@mui/material';
-import { ValidationStatusResponse } from '../services/api';
+import { ValidationStatusResponse } from '../types/validation';
 import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts';
 import { getValidationStatus } from '../services/api';
@@ -33,6 +39,27 @@ const ValidationResults: React.FC = () => {
     refetchInterval: (query) =>
       query.state.data?.status === 'completed' || query.state.data?.status === 'failed' ? false : 5000
   });
+
+  const renderValidationFlags = () => {
+    if (!data?.result?.validation_flags?.length) return null;
+
+    const flagMessages: Record<string, string> = {
+      low_sample_size: "Limited data available - results may not be fully representative",
+      low_engagement: "Low engagement detected - may indicate limited market interest",
+      low_activity: "Infrequent discussion activity - might be an emerging or niche problem"
+    };    return (
+      <Alert severity="info" sx={{ mt: 2 }}>
+        <AlertTitle>Validation Notes</AlertTitle>
+        <List>
+          {data.result.validation_flags.map((flag: string) => (
+            <ListItem key={flag}>
+              <ListItemText primary={flagMessages[flag] || flag} />
+            </ListItem>
+          ))}
+        </List>
+      </Alert>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -110,6 +137,8 @@ const ValidationResults: React.FC = () => {
         Validation Results
       </Typography>
 
+      {renderValidationFlags()}
+
       <Grid container spacing={3}>
         <Grid item xs={12} md={4}>
           <Card>
@@ -117,9 +146,18 @@ const ValidationResults: React.FC = () => {
               <Typography variant="h6" gutterBottom>
                 Validation Score
               </Typography>
-              <Typography variant="h3" color="primary">
-                {(result.validation_score * 100).toFixed(1)}%
-              </Typography>
+              <Box display="flex" alignItems="center">
+                <Typography variant="h3" color="primary" sx={{ mr: 2 }}>
+                  {(result.validation_score * 100).toFixed(1)}%
+                </Typography>
+                <Tooltip title="Confidence in validation results">
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Confidence: {(result.confidence_score * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                </Tooltip>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -161,7 +199,7 @@ const ValidationResults: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
-                  <Tooltip />
+                  <RechartsTooltip />
                   <Bar dataKey="value" fill="#1976d2" />
                 </BarChart>
               </ResponsiveContainer>
@@ -189,6 +227,34 @@ const ValidationResults: React.FC = () => {
               </Grid>
               <Grid item xs={12} sm={4}>
                 <Typography variant="subtitle2">Posts per Day</Typography>
+                <Typography variant="h6">
+                  {result.temporal_analysis.avg_posts_per_day.toFixed(1)}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Detailed Metrics
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={4}>
+                <Typography variant="subtitle2">Active Period</Typography>
+                <Typography variant="h6">
+                  {result.temporal_analysis.activity_period_days} days
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Typography variant="subtitle2">Unique Users</Typography>
+                <Typography variant="h6">
+                  {result.engagement_metrics.unique_users}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Typography variant="subtitle2">Average Daily Posts</Typography>
                 <Typography variant="h6">
                   {result.temporal_analysis.avg_posts_per_day.toFixed(1)}
                 </Typography>
