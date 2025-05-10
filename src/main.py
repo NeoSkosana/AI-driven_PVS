@@ -1,6 +1,8 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from api_gateway.api import app as api_app
+from api_gateway.auth_api import router as auth_router
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
@@ -10,8 +12,18 @@ def create_app() -> FastAPI:
         version="1.0.0"
     )
     
-    # Mount the API router
+    # Configure CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Mount the API routers
     app.mount("/api/v1", api_app)
+    app.include_router(auth_router, prefix="/auth", tags=["authentication"])
     
     return app
 

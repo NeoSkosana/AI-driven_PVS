@@ -1,7 +1,8 @@
 import uuid
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from datetime import datetime
+from fastapi.security import OAuth2PasswordBearer
 
 from .models import ProblemStatement, ValidationResult, ValidationRequest
 from ..data_collection.reddit_collector import RedditCollector
@@ -9,6 +10,7 @@ from ..analyzer.sentiment_analyzer import SentimentAnalyzer
 from ..storage_service.mongodb_storage import StorageService
 from ..cache.redis_cache import RedisCache
 from ..queue.message_queue import MessageQueue
+from ..auth.auth_service import get_current_active_user, User
 
 app = FastAPI(
     title="Problem Validation API",
@@ -29,6 +31,8 @@ message_queue.declare_queue("validation_tasks")
 
 # Store background tasks
 active_validations = {}
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def process_validation_task(message: dict):
     """
@@ -109,7 +113,8 @@ message_queue.channel.basic_consume(
 
 @app.post("/validate", response_model=ValidationRequest)
 async def validate_problem(
-    problem: ProblemStatement
+    problem: ProblemStatement,
+    current_user: User = Depends(get_current_active_user)
 ) -> ValidationRequest:
     """
     Submit a problem statement for validation.
@@ -138,7 +143,10 @@ async def validate_problem(
     return validation_request
 
 @app.get("/validate/{problem_id}", response_model=ValidationRequest)
-async def get_validation_status(problem_id: str) -> ValidationRequest:
+async def get_validation_status(
+    problem_id: str,
+    current_user: User = Depends(get_current_active_user)
+) -> ValidationRequest:
     """
     Get the status of a problem validation request.
     """
@@ -163,7 +171,10 @@ async def get_validation_status(problem_id: str) -> ValidationRequest:
     return active_validations[problem_id]
 
 @app.get("/problems", response_model=List[ValidationResult])
-async def list_problems(limit: int = 100) -> List[ValidationResult]:
+async def list_problems(
+    limit: int = 100,
+    current_user: User = Depends(get_current_active_user)
+) -> List[ValidationResult]:
     """
     List all validated problems.
     """
@@ -182,7 +193,10 @@ async def list_problems(limit: int = 100) -> List[ValidationResult]:
     return problem_list
 
 @app.delete("/problems/{problem_id}")
-async def delete_problem(problem_id: str) -> dict:
+async def delete_problem(
+    problem_id: str,
+    current_user: User = Depends(get_current_active_user)
+) -> dict:
     """
     Delete a validated problem and its results.
     """
