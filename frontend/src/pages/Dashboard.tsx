@@ -1,5 +1,5 @@
 import React from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Container,
@@ -15,7 +15,10 @@ import { listProblems } from '../services/api';
 import { ValidationResult } from '../services/api';
 
 const Dashboard: React.FC = () => {
-  const { data: problems, isLoading, error } = useQuery('problems', listProblems);
+  const { data: problems, isLoading, error } = useQuery<ValidationResult[]>({
+    queryKey: ['problems'],
+    queryFn: listProblems
+  });
 
   if (isLoading) {
     return (

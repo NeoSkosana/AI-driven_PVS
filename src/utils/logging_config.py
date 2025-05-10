@@ -70,15 +70,14 @@ def set_correlation_id(id: str) -> None:
 class LoggerAdapter(logging.LoggerAdapter):
     """Logger adapter that adds contextual information."""
     
-    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple[str, dict[str, Any]]:
         """Process the logging message and keyword arguments."""
         extra = kwargs.get('extra', {})
         
         # Add correlation ID
         if 'correlation_id' not in extra:
             extra['correlation_id'] = get_correlation_id()
-            
-        # Add timestamp if not present
+            # Add timestamp if not present
         if 'timestamp' not in extra:
             extra['timestamp'] = datetime.utcnow().isoformat()
             

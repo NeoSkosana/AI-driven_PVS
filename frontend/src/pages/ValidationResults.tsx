@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import {  Container,
   Paper,
   Typography,
@@ -10,6 +10,7 @@ import {  Container,
   Card,
   CardContent,
 } from '@mui/material';
+import { ValidationStatusResponse } from '../services/api';
 import {
   BarChart,
   Bar,
@@ -23,14 +24,15 @@ import { getValidationStatus } from '../services/api';
 
 const ValidationResults: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { data, isLoading, error } = useQuery(
-    ['validation', id],
-    () => getValidationStatus(id!),
-    {
-      refetchInterval: (data) =>
-        data?.status === 'completed' || data?.status === 'failed' ? false : 5000,
-    }
-  );
+  const { data, isLoading, error } = useQuery<ValidationStatusResponse, Error>({
+    queryKey: ['validation', id],
+    queryFn: async () => {
+      const response = await getValidationStatus(id!);
+      return response as ValidationStatusResponse;
+    },
+    refetchInterval: (query) =>
+      query.state.data?.status === 'completed' || query.state.data?.status === 'failed' ? false : 5000
+  });
 
   if (isLoading) {
     return (

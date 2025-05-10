@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 import {
   Container,
   Paper,
@@ -11,7 +11,7 @@ import {
   Chip,
   Alert,
 } from '@mui/material';
-import { validateProblem } from '../services/api';
+import { validateProblem, ValidationRequest, ValidationResponse } from '../services/api';
 
 const ProblemForm: React.FC = () => {
   const navigate = useNavigate();
@@ -19,9 +19,8 @@ const ProblemForm: React.FC = () => {
   const [description, setDescription] = useState('');
   const [keyword, setKeyword] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [targetMarket, setTargetMarket] = useState('');
-
-  const validation = useMutation(validateProblem, {
+  const [targetMarket, setTargetMarket] = useState('');  const validation = useMutation<ValidationResponse, Error, ValidationRequest>({
+    mutationFn: validateProblem,
     onSuccess: (data) => {
       navigate(`/results/${data.request_id}`);
     },
@@ -125,10 +124,9 @@ const ProblemForm: React.FC = () => {
             color="primary"
             size="large"
             fullWidth
-            sx={{ mt: 3 }}
-            disabled={!title || !description || keywords.length === 0 || validation.isLoading}
+            sx={{ mt: 3 }}            disabled={!title || !description || keywords.length === 0 || validation.status === 'pending'}
           >
-            {validation.isLoading ? 'Validating...' : 'Validate Problem'}
+            {validation.status === 'pending' ? 'Validating...' : 'Validate Problem'}
           </Button>
         </form>
       </Paper>
