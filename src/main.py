@@ -1,16 +1,29 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import os
+from dotenv import load_dotenv
 from api_gateway.api import app as api_app
 from api_gateway.auth_api import router as auth_router
+from middleware.logging_middleware import RequestLoggingMiddleware, ResponseHeaderMiddleware
+from utils.logging_config import setup_logging
+
+load_dotenv()
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    # Setup logging
+    setup_logging(os.getenv("LOG_LEVEL", "INFO"))
+    
     app = FastAPI(
         title="Problem Validation System",
         description="AI-Driven Problem Validation System for Micro-SaaS Ideas",
         version="1.0.0"
     )
+    
+    # Add middleware
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(ResponseHeaderMiddleware)
     
     # Configure CORS
     app.add_middleware(
