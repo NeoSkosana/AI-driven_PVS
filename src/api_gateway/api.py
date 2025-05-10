@@ -1,10 +1,11 @@
 import uuid
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from datetime import datetime
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from functools import partial
 
 from .models import ProblemStatement, ValidationResult, ValidationRequest
 from ..data_collection.reddit_collector import RedditCollector
@@ -13,6 +14,7 @@ from ..storage_service.mongodb_storage import StorageService
 from ..cache.redis_cache import RedisCache
 from ..queue.message_queue import MessageQueue
 from ..auth.auth_service import get_current_active_user, User
+from ..middleware.rate_limiter import RateLimiter
 from ..utils.error_handlers import (
     AppException,
     ValidationException,
@@ -45,6 +47,7 @@ sentiment_analyzer = SentimentAnalyzer()
 storage_service = StorageService()
 cache_service = RedisCache()
 message_queue = MessageQueue()
+rate_limiter = RateLimiter(cache_service)
 
 # Ensure message queue connection
 message_queue.connect()
@@ -54,6 +57,17 @@ message_queue.declare_queue("validation_tasks")
 active_validations = {}
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+async def check_rate_limit(
+    request: Request,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Dependency for rate limiting."""
+    await rate_limiter.check_rate_limit(request, current_user.username)
+    return current_user
+
+# Use this instead of get_current_active_user in the endpoints
+rate_limited_user = partial(check_rate_limit)
 
 def process_validation_task(message: dict):
     """Process a validation task from the message queue."""
@@ -116,7 +130,7 @@ message_queue.channel.basic_consume(
 @app.post("/validate", response_model=ValidationRequest)
 async def validate_problem(
     problem: ProblemStatement,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(rate_limited_user)
 ) -> ValidationRequest:
     """Submit a problem statement for validation."""
     try:
@@ -148,7 +162,7 @@ async def validate_problem(
 @app.get("/validate/{problem_id}", response_model=ValidationRequest)
 async def get_validation_status(
     problem_id: str,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(rate_limited_user)
 ) -> ValidationRequest:
     """Get the status of a problem validation request."""
     validation_request = active_validations.get(problem_id)
@@ -172,7 +186,7 @@ async def get_validation_status(
 @app.get("/problems", response_model=List[ValidationResult])
 async def list_problems(
     limit: int = 100,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(rate_limited_user)
 ) -> List[ValidationResult]:
     """List all validated problems."""
     try:
@@ -187,7 +201,7 @@ async def list_problems(
 @app.delete("/problems/{problem_id}")
 async def delete_problem(
     problem_id: str,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(rate_limited_user)
 ) -> dict:
     """Delete a validated problem and its results."""
     try:
