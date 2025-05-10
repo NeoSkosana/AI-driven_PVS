@@ -1,6 +1,7 @@
 import uuid
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi.openapi.utils import get_openapi
 from datetime import datetime
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import JSONResponse
@@ -22,11 +23,75 @@ from ..utils.error_handlers import (
     validation_exception_handler
 )
 
+# Tags metadata
+tags_metadata = [
+    {
+        "name": "problem-validation",
+        "description": "Operations for submitting and retrieving problem validation results",
+    },
+    {
+        "name": "health",
+        "description": "API health checking endpoints",
+    },
+    {
+        "name": "analytics",
+        "description": "Analytics and insights for validated problems",
+    }
+]
+
 app = FastAPI(
-    title="Problem Validation API",
-    description="API for validating micro-SaaS business problems using Reddit data analysis",
-    version="1.0.0"
+    title="AI-Driven Problem Validation System",
+    description="""
+    An API for validating business problems and ideas using AI-driven analysis of social media discussions.
+    
+    Key features:
+    - Problem statement validation
+    - Sentiment analysis
+    - Social media data collection
+    - Real-time processing
+    """,
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    openapi_tags=tags_metadata,
+    contact={
+        "name": "Development Team",
+        "email": "dev@example.com",
+    },
+    license_info={
+        "name": "Private",
+    }
 )
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # Add security schemes
+    openapi_schema["components"]["securitySchemes"] = {
+        "OAuth2PasswordBearer": {
+            "type": "oauth2",
+            "flows": {
+                "password": {
+                    "tokenUrl": "token",
+                    "scopes": {}
+                }
+            }
+        }
+    }
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # Add CORS middleware
 app.add_middleware(
@@ -127,7 +192,55 @@ message_queue.channel.basic_consume(
     on_message_callback=lambda ch, method, props, body: process_validation_task(body)
 )
 
-@app.post("/validate", response_model=ValidationRequest)
+# Health check endpoint
+@app.get("/health", 
+    tags=["health"],
+    summary="Check API health",
+    response_description="Basic health check response",
+    responses={
+        200: {
+            "description": "API is healthy",
+            "content": {
+                "application/json": {
+                    "example": {"status": "healthy", "timestamp": "2025-05-10T12:00:00Z"}
+                }
+            }
+        }
+    }
+)
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.utcnow()}
+
+@app.post("/validate", 
+    tags=["problem-validation"],
+    summary="Submit a problem statement for validation",
+    response_model=ValidationRequest,
+    responses={
+        201: {
+            "description": "Validation request created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "request_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "status": "processing",
+                        "created_at": "2025-05-10T12:00:00Z"
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Invalid input",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid problem statement format"}
+                }
+            }
+        },
+        401: {
+            "description": "Authentication required"
+        }
+    }
+)
 async def validate_problem(
     problem: ProblemStatement,
     current_user: User = Depends(rate_limited_user)
@@ -159,7 +272,27 @@ async def validate_problem(
     except Exception as e:
         raise ValidationException(str(e))
 
-@app.get("/validate/{problem_id}", response_model=ValidationRequest)
+@app.get("/validate/{problem_id}", 
+    tags=["problem-validation"],
+    summary="Get validation status",
+    response_model=ValidationRequest,
+    responses={
+        200: {
+            "description": "Validation status retrieved successfully"
+        },
+        404: {
+            "description": "Validation request not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Validation request not found for the given ID"}
+                }
+            }
+        },
+        401: {
+            "description": "Authentication required"
+        }
+    }
+)
 async def get_validation_status(
     problem_id: str,
     current_user: User = Depends(rate_limited_user)
@@ -183,7 +316,99 @@ async def get_validation_status(
         )
     return validation_request
 
-@app.get("/problems", response_model=List[ValidationResult])
+@app.get("/results/{problem_id}",
+    tags=["problem-validation"],
+    summary="Get validation results",
+    response_model=ValidationResult,
+    responses={
+        200: {
+            "description": "Validation results retrieved successfully"
+        },
+        404: {
+            "description": "Results not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Validation results not found for the given ID"}
+                }
+            }
+        },
+        401: {
+            "description": "Authentication required"
+        }
+    }
+)
+async def get_validation_results(
+    problem_id: str,
+    current_user: User = Depends(rate_limited_user)
+) -> ValidationResult:
+    """Get validation results for a problem."""
+    validation_request = active_validations.get(problem_id)
+    if not validation_request:
+        # Try to load from storage
+        stored_result = storage_service.get_validation_result(problem_id)
+        if stored_result:
+            return ValidationResult(**stored_result)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Validation results not found for the given ID"
+        )
+    if validation_request.result:
+        return validation_request.result
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Validation results not found for the given ID"
+    )
+
+@app.get("/analytics/trends",
+    tags=["analytics"],
+    summary="Get validation trends and insights",
+    responses={
+        200: {
+            "description": "Analytics data retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_validations": 150,
+                        "average_sentiment": 0.65,
+                        "popular_keywords": ["fintech", "AI", "sustainability"],
+                        "industry_distribution": {
+                            "Fintech": 30,
+                            "Healthcare": 25,
+                            "Education": 20
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Authentication required"
+        }
+    }
+)
+async def get_trends(current_user: User = Depends(rate_limited_user)):
+    """Get validation trends and insights."""
+    try:
+        analytics_data = storage_service.get_analytics_data()
+        return analytics_data
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@app.get("/problems", 
+    tags=["problem-validation"],
+    summary="List all validated problems",
+    response_model=List[ValidationResult],
+    responses={
+        200: {
+            "description": "Validated problems retrieved successfully"
+        },
+        401: {
+            "description": "Authentication required"
+        }
+    }
+)
 async def list_problems(
     limit: int = 100,
     current_user: User = Depends(rate_limited_user)
@@ -198,7 +423,21 @@ async def list_problems(
             detail=str(e)
         )
 
-@app.delete("/problems/{problem_id}")
+@app.delete("/problems/{problem_id}", 
+    tags=["problem-validation"],
+    summary="Delete a validated problem",
+    responses={
+        200: {
+            "description": "Problem deleted successfully"
+        },
+        401: {
+            "description": "Authentication required"
+        },
+        500: {
+            "description": "Internal server error"
+        }
+    }
+)
 async def delete_problem(
     problem_id: str,
     current_user: User = Depends(rate_limited_user)

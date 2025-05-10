@@ -17,8 +17,16 @@ from ..auth.auth_service import (
 )
 
 load_dotenv()
-router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Configure authentication router with OpenAPI documentation
+router = APIRouter(
+    prefix="/auth",
+    tags=["authentication"],
+    responses={401: {"description": "Authentication failed"}}
+)
+
+# Update token URL to include /auth prefix
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 # This would typically come from a database
 fake_users_db = {
@@ -66,7 +74,20 @@ async def get_current_active_user(
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-@router.post("/token", response_model=Token)
+@router.post("/token", 
+    response_model=Token,
+    summary="Create access token",
+    description="Create a new access token using username and password",
+    responses={
+        200: {
+            "description": "Successfully created access token",
+            "model": Token
+        },
+        401: {
+            "description": "Invalid credentials"
+        }
+    }
+)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends()
 ) -> Token:
@@ -89,7 +110,17 @@ async def login_for_access_token(
     
     return Token(access_token=access_token, token_type="bearer")
 
-@router.get("/users/me", response_model=User)
+@router.get("/me", 
+    response_model=User,
+    summary="Get current user",
+    description="Get information about the currently authenticated user",
+    responses={
+        200: {
+            "description": "Current user information",
+            "model": User
+        }
+    }
+)
 async def read_users_me(
     current_user: User = Depends(get_current_active_user)
 ) -> User:

@@ -1,8 +1,7 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from 'react-query';
-import {
-  Container,
+import {  Container,
   Paper,
   Typography,
   Box,
@@ -10,7 +9,6 @@ import {
   Grid,
   Card,
   CardContent,
-  Divider,
 } from '@mui/material';
 import {
   BarChart,

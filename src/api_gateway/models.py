@@ -7,27 +7,36 @@ class ProblemStatement(BaseModel):
     """Model for problem statement validation request."""
     title: Annotated[str, Field(min_length=10, max_length=200)] = Field(
         ..., 
-        description="Title of the problem statement"
+        description="Title of the problem statement",
+        example="AI-Powered Personal Finance Management App for Gen Z"
     )
     description: Annotated[str, Field(min_length=50, max_length=2000)] = Field(
         ..., 
-        description="Detailed description of the problem"
+        description="Detailed description of the problem and proposed solution",
+        example="""
+        Young adults (Gen Z) struggle with financial literacy and managing their finances effectively.
+        Our AI-powered app will provide personalized financial advice, automate savings, and gamify 
+        financial education to make it more engaging and accessible for the Gen Z audience.
+        """
     )
     keywords: List[str] = Field(
         ..., 
-        description="Keywords for searching relevant discussions",
+        description="Keywords for searching relevant discussions. Use specific terms related to your problem domain.",
         min_items=1,
-        max_items=10
+        max_items=10,
+        example=["personal finance", "Gen Z", "financial literacy", "fintech", "banking app"]
     )
-    target_market: Optional[Annotated[str, Field(min_length=3, max_length=100)]] = Field(
-        None, 
-        description="Target market or audience"
+    target_audience: str = Field(
+        ...,
+        description="Primary target audience for the solution",
+        example="Generation Z (ages 18-25)"
     )
-    industry: Optional[str] = Field(
-        None,
-        description="Industry sector the problem belongs to"
+    industry: str = Field(
+        ...,
+        description="Industry or sector the problem belongs to",
+        example="Fintech"
     )
-    
+
     @validator('keywords')
     def validate_keywords(cls, v):
         """Validate that keywords are properly formatted."""
@@ -52,28 +61,86 @@ class ProblemStatement(BaseModel):
             )
         return v
 
-class ValidationResult(BaseModel):
-    """Model for problem validation results."""
-    problem_id: str = Field(..., description="Unique identifier for the validated problem")
-    timestamp: datetime = Field(..., description="Time when validation was completed")
-    sentiment_summary: Dict = Field(..., description="Summary of sentiment analysis results")
-    engagement_metrics: Dict = Field(..., description="Metrics about user engagement")
-    temporal_analysis: Dict = Field(..., description="Analysis of temporal distribution")
-    validation_score: float = Field(
-        ..., 
-        description="Overall validation score",
-        ge=0.0,
-        le=1.0
-    )
-    relevant_posts: List[Dict] = Field(
-        ..., 
-        description="List of relevant posts found during validation",
-        min_items=0
-    )
-    
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
+        schema_extra = {
+            "description": "A model representing a problem statement for validation",
+            "example": {
+                "title": "AI-Powered Personal Finance Management App for Gen Z",
+                "description": "Young adults (Gen Z) struggle with financial literacy...",
+                "keywords": ["personal finance", "Gen Z", "financial literacy", "fintech", "banking app"],
+                "target_audience": "Generation Z (ages 18-25)",
+                "industry": "Fintech"
+            }
+        }
+
+class ValidationResult(BaseModel):
+    """Model representing the results of problem validation analysis."""
+    problem_id: str = Field(
+        ...,
+        description="Unique identifier for the validation request",
+        example="550e8400-e29b-41d4-a716-446655440000"
+    )
+    status: str = Field(
+        ...,
+        description="Current status of the validation request",
+        example="completed"
+    )
+    sentiment_score: Optional[float] = Field(
+        None,
+        description="Overall sentiment score from -1 (negative) to 1 (positive)",
+        example=0.75,
+        ge=-1,
+        le=1
+    )
+    engagement_metrics: Dict[str, int] = Field(
+        ...,
+        description="Metrics showing engagement levels in discussions",
+        example={
+            "total_discussions": 150,
+            "total_comments": 450,
+            "unique_users": 320
+        }
+    )
+    key_insights: List[str] = Field(
+        ...,
+        description="Main insights extracted from the analysis",
+        example=[
+            "Strong demand for simplified financial education",
+            "Users prefer gamified learning experiences",
+            "Privacy concerns are a major consideration"
+        ]
+    )
+    created_at: datetime = Field(
+        ...,
+        description="Timestamp when the validation request was created",
+        example="2025-05-10T12:00:00Z"
+    )
+    completed_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when the validation was completed",
+        example="2025-05-10T12:05:30Z"
+    )
+
+    class Config:
+        schema_extra = {
+            "description": "Results from the problem validation analysis",
+            "example": {
+                "problem_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "completed",
+                "sentiment_score": 0.75,
+                "engagement_metrics": {
+                    "total_discussions": 150,
+                    "total_comments": 450,
+                    "unique_users": 320
+                },
+                "key_insights": [
+                    "Strong demand for simplified financial education",
+                    "Users prefer gamified learning experiences",
+                    "Privacy concerns are a major consideration"
+                ],
+                "created_at": "2025-05-10T12:00:00Z",
+                "completed_at": "2025-05-10T12:05:30Z"
+            }
         }
 
 class ValidationRequest(BaseModel):

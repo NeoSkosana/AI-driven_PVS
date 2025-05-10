@@ -24,7 +24,7 @@ wheels/
 *.egg
 
 # Node
-node_modules/
+frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -52,3 +52,6 @@ Chat_History.txt
 mongodb_data/
 redis_data/
 rabbitmq_data/
+
+#PowerShell
+setup.ps1
