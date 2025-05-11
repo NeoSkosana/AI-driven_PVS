@@ -217,21 +217,128 @@ async def shutdown_event():
 # Health check endpoint
 @app.get("/health", 
     tags=["health"],
-    summary="Check API health",
-    response_description="Basic health check response",
+    summary="Check API health status",
+    description="Get detailed health status of the API and its dependencies",
+    response_description="Detailed health check response",
     responses={
         200: {
-            "description": "API is healthy",
+            "description": "System is healthy",
             "content": {
                 "application/json": {
-                    "example": {"status": "healthy", "timestamp": "2025-05-10T12:00:00Z"}
+                    "example": {
+                        "status": "healthy",
+                        "timestamp": "2025-05-10T12:00:00Z",
+                        "version": "1.0.0",
+                        "services": {
+                            "redis": "connected",
+                            "mongodb": "connected",
+                            "rabbitmq": "connected"
+                        },
+                        "system": {
+                            "cpu_usage": "23.5%",
+                            "memory_usage": "45.2%",
+                            "uptime": "2d 3h 45m"
+                        }
+                    }
+                }
+            }
+        },
+        503: {
+            "description": "System is unhealthy",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "unhealthy",
+                        "timestamp": "2025-05-10T12:00:00Z",
+                        "errors": [
+                            {"service": "redis", "status": "disconnected"},
+                            {"service": "mongodb", "status": "error", "details": "Connection timeout"}
+                        ]
+                    }
                 }
             }
         }
     }
 )
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
+    """Check the health of all system components."""
+    import psutil
+    
+    try:
+        # Check service connections
+        service_status = {
+            "redis": "connected" if cache_service.is_connected() else "disconnected",
+            "mongodb": "connected" if storage_service.is_connected() else "disconnected",
+            "rabbitmq": "connected" if message_queue.is_connected() else "disconnected"
+        }
+
+        # Check system resources
+        system_status = {
+            "cpu_usage": f"{psutil.cpu_percent()}%",
+            "memory_usage": f"{psutil.virtual_memory().percent}%",
+            "uptime": time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - psutil.boot_time()))
+        }
+
+        # Check for any unhealthy services
+        errors = [
+            {"service": service, "status": status}
+            for service, status in service_status.items()
+            if status != "connected"
+        ]
+
+        response = {
+            "status": "healthy" if not errors else "unhealthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "version": app.version,
+            "services": service_status,
+            "system": system_status
+        }
+
+        if errors:
+            response["errors"] = errors
+            return JSONResponse(status_code=503, content=response)
+
+        return response
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "timestamp": datetime.utcnow().isoformat(),
+                "errors": [{"service": "health_check", "status": "error", "details": str(e)}]
+            }
+        )
+
+@app.get("/metrics",
+    tags=["health"],
+    summary="Get system metrics",
+    description="Get Prometheus metrics for system monitoring",
+    response_description="Prometheus metrics in text format",
+    responses={
+        200: {
+            "description": "Metrics retrieved successfully",
+            "content": {
+                "text/plain": {
+                    "example": """
+                    # HELP http_requests_total Total number of HTTP requests
+                    # TYPE http_requests_total counter
+                    http_requests_total{method="GET",endpoint="/health",status="200"} 45
+                    """
+                }
+            }
+        }
+    }
+)
+async def metrics():
+    """Get Prometheus metrics."""
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from fastapi.responses import Response
+    
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 @app.post("/validate", 
     tags=["problem-validation"],
@@ -278,11 +385,11 @@ async def validate_problem(
             created_at=datetime.utcnow()
         )
         
-        # Store request
+        # Store request in memory
         active_validations[problem_id] = validation_request
         
         # Queue validation task
-        message_queue.publish(
+        success = message_queue.publish(
             "validation_tasks",
             {
                 "problem_id": problem_id,
@@ -290,9 +397,20 @@ async def validate_problem(
             }
         )
         
+        if not success:
+            # Clean up and raise error if queueing fails
+            del active_validations[problem_id]
+            raise ValidationException("Failed to queue validation task. Please try again.")
+        
+        # Update status to processing after successful queueing
+        validation_request.status = "processing"
         return validation_request
+    
+    except ValidationException as e:
+        raise
     except Exception as e:
-        raise ValidationException(str(e))
+        logger.error(f"Error creating validation request: {str(e)}")
+        raise ValidationException("An error occurred while processing your request.")
 
 @app.get("/validate/{problem_id}", 
     tags=["problem-validation"],
